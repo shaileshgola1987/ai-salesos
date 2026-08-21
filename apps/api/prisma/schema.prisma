@@ -1,0 +1,296 @@
+// AI SalesOS — Prisma schema
+// Multi-tenant: every business table carries organizationId (PRD §22).
+// Sprint 1-2 scope (PRD §24): Organization, Users, Auth, Leads, Pipeline.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionPlan {
+  FREE_TRIAL
+  STARTER
+  BUSINESS
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum UserRole {
+  ADMIN
+  OWNER
+  SALES_MANAGER
+  SALES_EXECUTIVE
+  FIELD_SALES_EXECUTIVE
+}
+
+enum LeadSource {
+  WHATSAPP
+  WEBSITE_FORM
+  INDIAMART
+  JUSTDIAL
+  META_ADS
+  GOOGLE_ADS
+  REFERRAL
+  MANUAL
+  IMPORT
+}
+
+enum LeadTemperature {
+  HOT
+  WARM
+  COLD
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  QUOTATION_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum TaskStatus {
+  PENDING
+  COMPLETED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+/// A tenant: one MSME/company using AI SalesOS (PRD §4.1 Organization module).
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  gstin     String?
+  plan      SubscriptionPlan @default(FREE_TRIAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Meta WhatsApp Business Account phone_number_id — routes inbound webhook
+  /// payloads to this org (PRD §5 WhatsApp CRM). Null until connected.
+  whatsappPhoneNumberId String? @unique
+
+  users             User[]
+  leads             Lead[]
+  customers         Customer[]
+  pipelineStages    PipelineStage[]
+  tasks             Task[]
+  conversations     Conversation[]
+  messages          Message[]
+  messageTemplates  MessageTemplate[]
+
+  @@map("organizations")
+}
+
+/// PRD §4.2 User Management — Admin/Owner/Sales Manager/Sales Executive/Field Sales Executive.
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name         String
+  email        String
+  phone        String?
+  passwordHash String
+  role         UserRole @default(SALES_EXECUTIVE)
+  isActive     Boolean  @default(true)
+
+  otpCode      String?
+  otpExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedLeads Lead[] @relation("LeadAssignee")
+  assignedTasks Task[] @relation("TaskAssignee")
+  sentMessages  Message[] @relation("MessageSender")
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+/// PRD §4.4 Pipeline Management — configurable Kanban stages per org.
+model PipelineStage {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name     String
+  order    Int
+  isClosed Boolean @default(false)
+
+  leads Lead[]
+
+  @@unique([organizationId, order])
+  @@index([organizationId])
+  @@map("pipeline_stages")
+}
+
+/// PRD §4.3 Lead Management + §6 AI Lead Scoring.
+model Lead {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  assignedToId String?
+  assignedTo   User? @relation("LeadAssignee", fields: [assignedToId], references: [id])
+
+  pipelineStageId String?
+  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id])
+
+  name        String
+  companyName String?
+  phone       String
+  email       String?
+
+  source      LeadSource @default(MANUAL)
+  status      LeadStatus @default(NEW)
+  temperature LeadTemperature @default(COLD)
+  score       Int @default(0) // AI lead score 0-100
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks         Task[]
+  conversations Conversation[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("leads")
+}
+
+/// PRD §4.7 Customer Management — a Lead becomes a Customer once won.
+model Customer {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name        String
+  companyName String?
+  phone       String
+  email       String?
+
+  healthScore Int @default(100) // PRD §10 Customer Health Score
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations Conversation[]
+
+  @@index([organizationId])
+  @@map("customers")
+}
+
+/// PRD §4.10 Task & Follow-ups — reminders, optionally tied to a lead.
+model Task {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  assignedToId String
+  assignedTo   User @relation("TaskAssignee", fields: [assignedToId], references: [id])
+
+  title       String
+  notes       String?
+  dueAt       DateTime
+  status      TaskStatus @default(PENDING)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, status])
+  @@index([leadId])
+  @@map("tasks")
+}
+
+/// PRD §5 WhatsApp CRM — one thread per phone number, auto-linked to a lead/customer when possible.
+model Conversation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  phone String
+
+  leadId String?
+  lead   Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages Message[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+  @@index([organizationId, lastMessageAt])
+  @@map("conversations")
+}
+
+/// A single inbound or outbound WhatsApp message within a Conversation.
+model Message {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  direction    MessageDirection
+  body         String
+  status       MessageStatus @default(QUEUED)
+  externalId   String? // provider (e.g. Meta) message id
+  templateName String? // set when sent from a MessageTemplate
+
+  sentById String?
+  sentBy   User? @relation("MessageSender", fields: [sentById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([conversationId])
+  @@map("messages")
+}
+
+/// PRD §5 WhatsApp CRM — reusable message templates for quick replies/outreach.
+model MessageTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name     String
+  body     String // may contain {{1}}, {{2}} placeholders
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("message_templates")
+}
