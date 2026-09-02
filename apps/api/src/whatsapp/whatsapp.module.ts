@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
+import { AiModule } from '../ai/ai.module';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
 import { MessageTemplatesController } from './message-templates.controller';
@@ -13,7 +14,7 @@ import { StubWhatsAppProvider } from './providers/stub-whatsapp.provider';
 import { MetaWhatsAppProvider } from './providers/meta-whatsapp.provider';
 
 @Module({
-  imports: [ConfigModule, AuthModule],
+  imports: [ConfigModule, AuthModule, AiModule],
   controllers: [
     ConversationsController,
     MessageTemplatesController,

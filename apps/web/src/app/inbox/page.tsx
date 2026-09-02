@@ -8,6 +8,7 @@ import type {
   LeadDto,
   MessageDto,
   MessageTemplateDto,
+  ReplySuggestionsDto,
 } from "@ai-salesos/shared";
 import { apiFetch, apiFetchBlob, ApiError } from "@/lib/api";
 import { getWhatsAppSocket } from "@/lib/socket";
@@ -253,6 +254,8 @@ function ConversationThread({
   const [showAttach, setShowAttach] = useState(false);
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaType, setMediaType] = useState<(typeof MEDIA_TYPE_OPTIONS)[number]>("IMAGE");
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -267,6 +270,7 @@ function ConversationThread({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- conversation changed -> refetch thread
     void load();
+    setSuggestions([]);
   }, [load]);
 
   useEffect(() => {
@@ -318,11 +322,28 @@ function ConversationThread({
       setBody("");
       setMediaUrl("");
       setShowAttach(false);
+      setSuggestions([]);
       void load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to send message");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function onSuggestReplies() {
+    setSuggesting(true);
+    setError(null);
+    try {
+      const result = await apiFetch<ReplySuggestionsDto>(
+        `/conversations/${conversation.id}/ai/reply-suggestions`,
+        { method: "POST" },
+      );
+      setSuggestions(result.suggestions);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to suggest replies");
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -428,7 +449,33 @@ function ConversationThread({
           >
             Simulate reply (dev)
           </button>
+          <button
+            type="button"
+            onClick={onSuggestReplies}
+            disabled={suggesting}
+            className="text-xs text-zinc-400 hover:text-zinc-700 disabled:opacity-50 dark:hover:text-zinc-200"
+          >
+            {suggesting ? "Thinking…" : "Suggest replies"}
+          </button>
         </div>
+
+        {suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((suggestion, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  setBody(suggestion);
+                  setSuggestions([]);
+                }}
+                className="rounded-full border border-zinc-300 px-3 py-1 text-left text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
 
         {showAttach && (
           <div className="flex flex-wrap items-center gap-2">

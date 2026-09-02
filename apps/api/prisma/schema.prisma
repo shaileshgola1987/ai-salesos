@@ -182,7 +182,12 @@ model Lead {
   source      LeadSource @default(MANUAL)
   status      LeadStatus @default(NEW)
   temperature LeadTemperature @default(COLD)
-  score       Int @default(0) // AI lead score 0-100
+  score       Int @default(0) // AI lead score 0-100 (PRD §6) — set by AiService, never user-edited
+
+  /// PRD §11 AI Sales Assistant — a cached AI-generated summary; regenerated on demand
+  /// (see AiService.summarizeLead), not recomputed automatically.
+  aiSummary            String?
+  aiSummaryGeneratedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

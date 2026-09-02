@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import type { ConversationDto, LeadDto, PipelineStageDto, TaskDto, UserDto } from "@ai-salesos/shared";
+import type {
+  ConversationDto,
+  FollowUpSuggestionDto,
+  LeadDto,
+  LeadScoreResultDto,
+  PipelineStageDto,
+  TaskDto,
+  UserDto,
+} from "@ai-salesos/shared";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/AppShell";
@@ -23,6 +31,11 @@ export default function LeadDetailPage() {
   const [stages, setStages] = useState<PipelineStageDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [scoring, setScoring] = useState(false);
+  const [scoreSuggestion, setScoreSuggestion] = useState<{
+    suggestedTemperature: string;
+    reasoning: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +122,32 @@ export default function LeadDetailPage() {
   }
 
   const canDelete = user?.role === "OWNER" || user?.role === "ADMIN";
+
+  async function onRecalculateScore() {
+    if (!lead) return;
+    setScoring(true);
+    setError(null);
+    try {
+      const result = await apiFetch<LeadScoreResultDto>(`/leads/${lead.id}/ai/score`, {
+        method: "POST",
+      });
+      setLead(result.lead);
+      setScoreSuggestion({
+        suggestedTemperature: result.suggestedTemperature,
+        reasoning: result.reasoning,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to recalculate score");
+    } finally {
+      setScoring(false);
+    }
+  }
+
+  async function onApplySuggestedTemperature() {
+    if (!scoreSuggestion) return;
+    await updateField("temperature", scoreSuggestion.suggestedTemperature);
+    setScoreSuggestion(null);
+  }
 
   async function onMessage() {
     if (!lead) return;
@@ -249,15 +288,101 @@ export default function LeadDetailPage() {
               </select>
             </Field>
             <Field label="AI score">
-              <p className="px-1 py-2 text-sm text-zinc-500">{lead.score} / 100</p>
+              <div className="flex flex-col gap-1 px-1 py-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-zinc-500">{lead.score} / 100</p>
+                  <button
+                    type="button"
+                    onClick={onRecalculateScore}
+                    disabled={scoring}
+                    className="text-xs text-zinc-500 hover:underline disabled:opacity-50 dark:text-zinc-400"
+                  >
+                    {scoring ? "Scoring…" : "Recalculate"}
+                  </button>
+                </div>
+                {scoreSuggestion && (
+                  <div className="rounded-md bg-zinc-50 p-2 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+                    <p>{scoreSuggestion.reasoning}</p>
+                    {scoreSuggestion.suggestedTemperature !== lead.temperature && (
+                      <button
+                        type="button"
+                        onClick={onApplySuggestedTemperature}
+                        className="mt-1 font-medium text-zinc-900 hover:underline dark:text-zinc-100"
+                      >
+                        Apply suggested temperature: {scoreSuggestion.suggestedTemperature}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </Field>
           </div>
+
+          <AiSummarySection lead={lead} onUpdated={setLead} />
 
           <FollowUpsSection leadId={lead.id} users={users} currentUserId={user?.id} />
         </div>
       )}
     </AppShell>
   );
+}
+
+function AiSummarySection({
+  lead,
+  onUpdated,
+}: {
+  lead: LeadDto;
+  onUpdated: (lead: LeadDto) => void;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onGenerate() {
+    setGenerating(true);
+    setError(null);
+    try {
+      const updated = await apiFetch<LeadDto>(`/leads/${lead.id}/ai/summary`, { method: "POST" });
+      onUpdated(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to generate summary");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">AI summary</h3>
+        <button
+          onClick={onGenerate}
+          disabled={generating}
+          className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        >
+          {generating ? "Generating…" : lead.aiSummary ? "Regenerate" : "Generate summary"}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {lead.aiSummary ? (
+        <>
+          <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-300">{lead.aiSummary}</p>
+          {lead.aiSummaryGeneratedAt && (
+            <p className="mt-2 text-xs text-zinc-400">
+              Generated {new Date(lead.aiSummaryGeneratedAt).toLocaleString()}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-500">No summary yet.</p>
+      )}
+    </section>
+  );
+}
+
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function FollowUpsSection({
@@ -276,6 +401,8 @@ function FollowUpsSection({
   const [dueAt, setDueAt] = useState("");
   const [assignedToId, setAssignedToId] = useState(currentUserId ?? "");
   const [submitting, setSubmitting] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestionReasoning, setSuggestionReasoning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -307,12 +434,32 @@ function FollowUpsSection({
       });
       setTitle("");
       setDueAt("");
+      setSuggestionReasoning(null);
       setShowCreate(false);
       void load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create follow-up");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function onSuggestFollowUp() {
+    setSuggesting(true);
+    setError(null);
+    try {
+      const suggestion = await apiFetch<FollowUpSuggestionDto>(
+        `/leads/${leadId}/ai/follow-up-suggestion`,
+        { method: "POST" },
+      );
+      setTitle(suggestion.title);
+      setDueAt(toDatetimeLocalValue(suggestion.suggestedDueAt));
+      setSuggestionReasoning(suggestion.reasoning);
+      setShowCreate(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to suggest a follow-up");
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -331,12 +478,24 @@ function FollowUpsSection({
     <section className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Follow-ups</h3>
-        <button
-          onClick={() => setShowCreate((v) => !v)}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
-          {showCreate ? "Cancel" : "Add follow-up"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onSuggestFollowUp}
+            disabled={suggesting}
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            {suggesting ? "Thinking…" : "Suggest follow-up"}
+          </button>
+          <button
+            onClick={() => {
+              setSuggestionReasoning(null);
+              setShowCreate((v) => !v);
+            }}
+            className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            {showCreate ? "Cancel" : "Add follow-up"}
+          </button>
+        </div>
       </div>
 
       {showCreate && (
@@ -344,6 +503,11 @@ function FollowUpsSection({
           onSubmit={onCreate}
           className="flex flex-col gap-3 border-b border-zinc-200 bg-zinc-50 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900"
         >
+          {suggestionReasoning && (
+            <p className="rounded-md bg-zinc-100 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              AI suggestion: {suggestionReasoning}
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <input
               placeholder="What needs to happen?"

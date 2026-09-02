@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiService } from '../ai/ai.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { AssignLeadDto } from './dto/assign-lead.dto';
@@ -9,7 +10,12 @@ import { QueryLeadsDto } from './dto/query-leads.dto';
 
 @Injectable()
 export class LeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(LeadsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService,
+  ) {}
 
   private readonly include = {
     assignedTo: { select: { id: true, name: true } },
@@ -66,7 +72,7 @@ export class LeadsService {
       pipelineStageId = firstStage?.id;
     }
 
-    return this.prisma.lead.create({
+    const lead = await this.prisma.lead.create({
       data: {
         organizationId,
         name: dto.name,
@@ -80,6 +86,19 @@ export class LeadsService {
       },
       include: this.include,
     });
+
+    // AI Lead Scoring (PRD §6) — best-effort: a scoring failure (e.g. AI provider down)
+    // must never block lead creation, so the lead simply keeps its default score of 0.
+    try {
+      const { lead: scored } = await this.aiService.scoreLead(
+        organizationId,
+        lead.id,
+      );
+      return scored;
+    } catch (err) {
+      this.logger.warn(`AI lead scoring failed for lead ${lead.id}`, err);
+      return lead;
+    }
   }
 
   async update(organizationId: string, id: string, dto: UpdateLeadDto) {
