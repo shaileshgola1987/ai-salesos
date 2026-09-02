@@ -1,4 +1,5 @@
 import {
+  AiProviderName,
   LeadSource,
   LeadStatus,
   LeadTemperature,
@@ -56,10 +57,29 @@ export interface LeadDto {
   email?: string | null;
   source: LeadSource;
   status: LeadStatus;
-  score: number; // 0-100, AI lead scoring per PRD §6
+  score: number; // 0-100, AI lead scoring per PRD §6 — set by AiService, never user-edited
   temperature: LeadTemperature;
+  aiSummary?: string | null;
+  aiSummaryGeneratedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LeadScoreResultDto {
+  lead: LeadDto;
+  suggestedTemperature: LeadTemperature;
+  reasoning: string;
+}
+
+export interface FollowUpSuggestionDto {
+  title: string;
+  notes?: string;
+  suggestedDueAt: string;
+  reasoning: string;
+}
+
+export interface ReplySuggestionsDto {
+  suggestions: string[];
 }
 
 export interface PipelineStageDto {
@@ -216,4 +236,18 @@ export interface QuotationDto {
   items: QuotationItemDto[];
   createdAt: string;
   updatedAt: string;
+}
+
+// Platform-admin only (super admin) — never reachable by an Organization's Owner/Admin.
+export interface AiProviderConfigSummaryDto {
+  provider: AiProviderName;
+  model?: string | null;
+  /** A masked preview (e.g. "sk-a…9f3d") — the full key is never returned by the API. */
+  keyPreview: string;
+  updatedAt: string;
+}
+
+export interface AiSettingsDto {
+  activeProvider: AiProviderName | null;
+  providers: AiProviderConfigSummaryDto[];
 }

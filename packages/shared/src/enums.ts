@@ -77,3 +77,10 @@ export enum QuotationStatus {
   REJECTED = "REJECTED",
   EXPIRED = "EXPIRED",
 }
+
+// Platform-wide (super admin only) — which LLM backs every organization's AI features.
+export enum AiProviderName {
+  ANTHROPIC = "ANTHROPIC",
+  OPENAI = "OPENAI",
+  GEMINI = "GEMINI",
+}
