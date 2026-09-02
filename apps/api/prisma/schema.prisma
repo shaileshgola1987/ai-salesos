@@ -73,6 +73,14 @@ enum MessageStatus {
   FAILED
 }
 
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+  AUDIO
+  VIDEO
+}
+
 /// A tenant: one MSME/company using AI SalesOS (PRD §4.1 Organization module).
 model Organization {
   id        String   @id @default(cuid())
@@ -241,6 +249,10 @@ model Conversation {
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   lastMessageAt DateTime @default(now())
+  /// Timestamp of the most recent customer-initiated (INBOUND) message — drives the
+  /// WhatsApp Cloud API 24-hour customer service window: outside it, only an approved
+  /// template message can reopen the conversation (Meta policy, see ConversationsService).
+  lastInboundMessageAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -262,10 +274,18 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   direction    MessageDirection
-  body         String
+  type         MessageType @default(TEXT)
+  body         String // caption/text; may be empty for media-only messages
   status       MessageStatus @default(QUEUED)
   externalId   String? // provider (e.g. Meta) message id
   templateName String? // set when sent from a MessageTemplate
+
+  /// Present when type != TEXT. mediaProviderId is the WhatsApp provider's media id
+  /// (used to fetch/stream the file on demand — see WhatsApp media proxy endpoint);
+  /// mediaUrl is used instead for dev/stub-provider messages that reference a plain URL.
+  mediaProviderId String?
+  mediaUrl        String?
+  mediaMimeType   String?
 
   sentById String?
   sentBy   User? @relation("MessageSender", fields: [sentById], references: [id], onDelete: SetNull)

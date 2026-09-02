@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { OrganizationDto, UserDto } from "@ai-salesos/shared";
 import { apiFetch, clearToken, getToken, setToken } from "./api";
+import { disconnectWhatsAppSocket } from "./socket";
 
 interface RegisterInput {
   organizationName: string;
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     clearToken();
+    disconnectWhatsAppSocket();
     setUser(null);
     setOrganization(null);
   }, []);
