@@ -14,6 +14,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { ProductsModule } from './products/products.module';
 import { QuotationsModule } from './quotations/quotations.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
+import { VisitsModule } from './visits/visits.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
     ProductsModule,
     QuotationsModule,
     PlatformAdminModule,
+    VisitsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

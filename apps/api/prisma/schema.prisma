@@ -112,6 +112,7 @@ model Organization {
   messageTemplates  MessageTemplate[]
   products          Product[]
   quotations        Quotation[]
+  visits            Visit[]
 
   @@map("organizations")
 }
@@ -139,6 +140,7 @@ model User {
   assignedTasks     Task[] @relation("TaskAssignee")
   sentMessages      Message[] @relation("MessageSender")
   createdQuotations Quotation[] @relation("QuotationCreator")
+  visits            Visit[] @relation("VisitUser")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -195,6 +197,7 @@ model Lead {
   tasks         Task[]
   conversations Conversation[]
   quotations    Quotation[]
+  visits        Visit[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -219,6 +222,7 @@ model Customer {
 
   conversations Conversation[]
   quotations    Quotation[]
+  visits        Visit[]
 
   @@index([organizationId])
   @@map("customers")
@@ -466,4 +470,47 @@ model PlatformSettings {
   updatedAt DateTime @updatedAt
 
   @@map("platform_settings")
+}
+
+/// PRD §8 Sales Force Automation — a field rep's GPS-stamped visit to a lead/customer (or a
+/// standalone location check-in). checkOutAt null means the visit is still in progress.
+model Visit {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  leadId String?
+  lead   Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  userId String
+  user   User @relation("VisitUser", fields: [userId], references: [id])
+
+  /// Client-generated idempotency key — lets a check-in queued offline (see the web app's
+  /// IndexedDB outbox) be retried safely without creating a duplicate visit if the first
+  /// attempt actually reached the server before the connection dropped.
+  clientId String?
+
+  purpose String
+  notes   String?
+
+  checkInAt  DateTime @default(now())
+  checkInLat Decimal  @db.Decimal(9, 6)
+  checkInLng Decimal  @db.Decimal(9, 6)
+
+  checkOutAt    DateTime?
+  checkOutLat   Decimal?  @db.Decimal(9, 6)
+  checkOutLng   Decimal?  @db.Decimal(9, 6)
+  checkOutNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, clientId])
+  @@index([organizationId])
+  @@index([organizationId, userId])
+  @@index([leadId])
+  @@map("visits")
 }

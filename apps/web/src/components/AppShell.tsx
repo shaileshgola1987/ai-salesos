@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: "/pipeline", label: "Pipeline" },
   { href: "/quotations", label: "Quotations" },
   { href: "/products", label: "Products" },
+  { href: "/visits", label: "Visits" },
   { href: "/tasks", label: "Tasks" },
   { href: "/team", label: "Team" },
 ];
