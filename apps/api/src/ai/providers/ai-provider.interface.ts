@@ -52,5 +52,3 @@ export interface AiProvider {
   /** Returns 2-3 short suggested reply texts for the salesperson to pick from and edit. */
   suggestReplies(context: ReplySuggestionContext): Promise<string[]>;
 }
-
-export const AI_PROVIDER = Symbol('AI_PROVIDER');

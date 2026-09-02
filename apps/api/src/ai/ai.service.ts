@@ -1,9 +1,8 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Lead, MessageDirection, Prisma, Task } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { AI_PROVIDER } from './providers/ai-provider.interface';
+import { AiProviderResolver } from './ai-provider-resolver.service';
 import type {
-  AiProvider,
   LeadScoringContext,
   LeadSummaryContext,
 } from './providers/ai-provider.interface';
@@ -21,7 +20,7 @@ type LeadWithAiContext = Lead & {
 export class AiService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(AI_PROVIDER) private readonly provider: AiProvider,
+    private readonly providerResolver: AiProviderResolver,
   ) {}
 
   private readonly leadInclude = {
@@ -33,9 +32,8 @@ export class AiService {
 
   async scoreLead(organizationId: string, leadId: string) {
     const lead = await this.getLeadWithContext(organizationId, leadId);
-    const result = await this.provider.scoreLead(
-      this.buildScoringContext(lead),
-    );
+    const provider = await this.providerResolver.getProvider();
+    const result = await provider.scoreLead(this.buildScoringContext(lead));
     const score = Math.max(0, Math.min(100, Math.round(result.score)));
 
     const updated = await this.prisma.lead.update({
@@ -53,7 +51,8 @@ export class AiService {
 
   async summarizeLead(organizationId: string, leadId: string) {
     const lead = await this.getLeadWithContext(organizationId, leadId);
-    const summary = await this.provider.summarizeLead(
+    const provider = await this.providerResolver.getProvider();
+    const summary = await provider.summarizeLead(
       this.buildSummaryContext(lead),
     );
 
@@ -66,7 +65,8 @@ export class AiService {
 
   async suggestFollowUp(organizationId: string, leadId: string) {
     const lead = await this.getLeadWithContext(organizationId, leadId);
-    return this.provider.suggestFollowUp(this.buildSummaryContext(lead));
+    const provider = await this.providerResolver.getProvider();
+    return provider.suggestFollowUp(this.buildSummaryContext(lead));
   }
 
   async suggestReplies(organizationId: string, conversationId: string) {
@@ -82,7 +82,8 @@ export class AiService {
       select: { direction: true, body: true },
     });
 
-    const suggestions = await this.provider.suggestReplies({
+    const provider = await this.providerResolver.getProvider();
+    const suggestions = await provider.suggestReplies({
       recentMessages: messages.reverse(),
     });
     return { suggestions };

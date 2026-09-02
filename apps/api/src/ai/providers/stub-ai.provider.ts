@@ -30,7 +30,8 @@ function temperatureForScore(score: number): LeadTemperature {
 
 /**
  * Deterministic, rule-based scoring/summary/suggestion logic — no API key required.
- * Default provider until AI_PROVIDER=anthropic is configured (see AnthropicAiProvider).
+ * The default until a PlatformAdmin activates a real provider (see AiProviderResolver);
+ * also the automatic fallback if the configured provider's key is missing or a call fails.
  * Mirrors the WhatsApp stub/real provider split from Sprint 4 (see StubWhatsAppProvider).
  */
 @Injectable()

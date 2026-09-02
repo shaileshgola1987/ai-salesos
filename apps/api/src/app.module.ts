@@ -13,6 +13,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { ProductsModule } from './products/products.module';
 import { QuotationsModule } from './quotations/quotations.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { QuotationsModule } from './quotations/quotations.module';
     WhatsAppModule,
     ProductsModule,
     QuotationsModule,
+    PlatformAdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

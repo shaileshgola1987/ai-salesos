@@ -1,4 +1,5 @@
 import {
+  AiProviderName,
   LeadSource,
   LeadStatus,
   LeadTemperature,
@@ -235,4 +236,18 @@ export interface QuotationDto {
   items: QuotationItemDto[];
   createdAt: string;
   updatedAt: string;
+}
+
+// Platform-admin only (super admin) — never reachable by an Organization's Owner/Admin.
+export interface AiProviderConfigSummaryDto {
+  provider: AiProviderName;
+  model?: string | null;
+  /** A masked preview (e.g. "sk-a…9f3d") — the full key is never returned by the API. */
+  keyPreview: string;
+  updatedAt: string;
+}
+
+export interface AiSettingsDto {
+  activeProvider: AiProviderName | null;
+  providers: AiProviderConfigSummaryDto[];
 }
