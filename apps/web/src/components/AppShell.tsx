@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -35,10 +35,17 @@ export function AppShell({
   const { user, organization, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
+
+  // Collapse the mobile nav drawer whenever navigation actually happens.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- close drawer on route change
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   if (loading || !user || !organization) {
     return (
@@ -51,33 +58,55 @@ export function AppShell({
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
       <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold text-zinc-900 sm:text-lg dark:text-zinc-50">
               {organization.name}
             </h1>
-            <p className="text-xs text-zinc-500">
-              {organization.plan.replace("_", " ")} plan · Signed in as {user.name} (
+            <p className="truncate text-xs text-zinc-500">
+              {organization.plan.replace("_", " ")} plan · {user.name} (
               {ROLE_LABELS[user.role] ?? user.role})
             </p>
           </div>
-          <button
-            onClick={logout}
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            Sign out
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <button
+              onClick={logout}
+              className="hidden rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 sm:block dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              Sign out
+            </button>
+            <button
+              onClick={() => setMobileNavOpen((v) => !v)}
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileNavOpen}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 text-zinc-700 md:hidden dark:border-zinc-700 dark:text-zinc-300"
+            >
+              {mobileNavOpen ? (
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
-        <nav className="flex gap-1 px-6">
+        <nav
+          className={`${
+            mobileNavOpen ? "flex" : "hidden"
+          } flex-col border-t border-zinc-100 px-4 py-2 md:flex md:flex-row md:gap-1 md:border-t-0 md:px-6 md:py-0 dark:border-zinc-900`}
+        >
           {NAV_LINKS.map((link) => {
             const active = pathname?.startsWith(link.href);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-t-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors md:rounded-t-md ${
                   active
-                    ? "border-b-2 border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-50"
+                    ? "text-zinc-900 md:border-b-2 md:border-zinc-900 dark:text-zinc-50 md:dark:border-zinc-100"
                     : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
                 }`}
               >
@@ -85,12 +114,18 @@ export function AppShell({
               </Link>
             );
           })}
+          <button
+            onClick={logout}
+            className="mt-2 rounded-md border border-zinc-300 px-3 py-2 text-left text-sm text-zinc-700 sm:hidden dark:border-zinc-700 dark:text-zinc-300"
+          >
+            Sign out
+          </button>
         </nav>
       </header>
 
       <main
         className={`mx-auto flex w-full flex-1 flex-col ${
-          fullWidth ? "max-w-7xl px-6 py-6" : "max-w-5xl px-6 py-8"
+          fullWidth ? "max-w-7xl px-3 py-4 sm:px-6 sm:py-6" : "max-w-5xl px-3 py-4 sm:px-6 sm:py-8"
         }`}
       >
         {children}

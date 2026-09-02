@@ -7,7 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import type { OrganizationDto, UserDto } from "@ai-salesos/shared";
+import type { LoginResponseDto, OrganizationDto, UserDto } from "@ai-salesos/shared";
 import { apiFetch, clearToken, getToken, setToken } from "./api";
 import { disconnectWhatsAppSocket } from "./socket";
 
@@ -30,7 +30,8 @@ interface AuthContextValue {
   organization: OrganizationDto | null;
   loading: boolean;
   register: (input: RegisterInput) => Promise<void>;
-  login: (input: LoginInput) => Promise<void>;
+  login: (input: LoginInput) => Promise<LoginResponseDto>;
+  completeTwoFactorLogin: (pendingToken: string, code: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -82,11 +83,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [loadCurrentUser],
   );
 
+  // Two outcomes: a normal accessToken, or {requiresTwoFactor, pendingToken} when the user
+  // has 2FA enabled — the caller (LoginPage) checks which one it got.
   const login = useCallback(
     async (input: LoginInput) => {
+      const result = await apiFetch<LoginResponseDto>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+      if ("accessToken" in result) {
+        setToken(result.accessToken);
+        await loadCurrentUser();
+      }
+      return result;
+    },
+    [loadCurrentUser],
+  );
+
+  const completeTwoFactorLogin = useCallback(
+    async (pendingToken: string, code: string) => {
       const { accessToken } = await apiFetch<{ accessToken: string }>(
-        "/auth/login",
-        { method: "POST", body: JSON.stringify(input) },
+        "/auth/2fa/verify-login",
+        { method: "POST", body: JSON.stringify({ pendingToken, code }) },
       );
       setToken(accessToken);
       await loadCurrentUser();
@@ -103,7 +121,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, organization, loading, register, login, logout, refresh: loadCurrentUser }}
+      value={{
+        user,
+        organization,
+        loading,
+        register,
+        login,
+        completeTwoFactorLogin,
+        logout,
+        refresh: loadCurrentUser,
+      }}
     >
       {children}
     </AuthContext.Provider>
