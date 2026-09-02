@@ -69,3 +69,11 @@ export enum MessageStatus {
   READ = "READ",
   FAILED = "FAILED",
 }
+
+export enum QuotationStatus {
+  DRAFT = "DRAFT",
+  SENT = "SENT",
+  ACCEPTED = "ACCEPTED",
+  REJECTED = "REJECTED",
+  EXPIRED = "EXPIRED",
+}

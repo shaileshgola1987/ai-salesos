@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { ConversationDto, LeadDto, PipelineStageDto, TaskDto, UserDto } from "@ai-salesos/shared";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -141,6 +142,12 @@ export default function LeadDetailPage() {
               {lead.companyName && <p className="text-sm text-zinc-500">{lead.companyName}</p>}
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href={`/quotations/new?leadId=${lead.id}`}
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
+                Create quotation
+              </Link>
               <button
                 onClick={onMessage}
                 disabled={saving}

@@ -33,5 +33,6 @@ import { MetaWhatsAppProvider } from './providers/meta-whatsapp.provider';
       inject: [ConfigService],
     },
   ],
+  exports: [ConversationsService],
 })
 export class WhatsAppModule {}
