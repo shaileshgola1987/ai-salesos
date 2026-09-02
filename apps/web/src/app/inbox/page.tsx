@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type {
@@ -9,8 +9,17 @@ import type {
   MessageDto,
   MessageTemplateDto,
 } from "@ai-salesos/shared";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, apiFetchBlob, ApiError } from "@/lib/api";
+import { getWhatsAppSocket } from "@/lib/socket";
 import { AppShell } from "@/components/AppShell";
+
+const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MEDIA_TYPE_OPTIONS = ["IMAGE", "DOCUMENT", "AUDIO", "VIDEO"] as const;
+
+function isSessionOpen(conversation: ConversationDto): boolean {
+  if (!conversation.lastInboundMessageAt) return false;
+  return Date.now() - new Date(conversation.lastInboundMessageAt).getTime() < SESSION_WINDOW_MS;
+}
 
 export default function InboxPage() {
   return (
@@ -51,6 +60,28 @@ function InboxPageInner() {
       apiFetch<LeadDto[]>("/leads").then(setLeads),
       apiFetch<MessageTemplateDto[]>("/message-templates").then(setTemplates),
     ]).catch(() => undefined);
+  }, []);
+
+  // Live conversation-list updates (new threads, reordering on new messages, session-window
+  // state) so the Inbox reflects inbound WhatsApp webhook traffic without a manual reload.
+  useEffect(() => {
+    const socket = getWhatsAppSocket();
+    if (!socket) return;
+
+    function upsert(conversation: ConversationDto) {
+      setConversations((prev) => {
+        const list = prev ?? [];
+        const withoutExisting = list.filter((c) => c.id !== conversation.id);
+        return [conversation, ...withoutExisting].sort(
+          (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+        );
+      });
+    }
+
+    socket.on("conversation.updated", upsert);
+    return () => {
+      socket.off("conversation.updated", upsert);
+    };
   }, []);
 
   const selected = conversations?.find((c) => c.id === selectedId) ?? null;
@@ -114,7 +145,7 @@ function InboxPageInner() {
                 {lastMessage && (
                   <p className="mt-1 truncate text-xs text-zinc-400">
                     {lastMessage.direction === "OUTBOUND" ? "You: " : ""}
-                    {lastMessage.body}
+                    {lastMessage.type !== "TEXT" ? `📎 ${lastMessage.type.toLowerCase()}` : lastMessage.body}
                   </p>
                 )}
               </button>
@@ -219,6 +250,10 @@ function ConversationThread({
   const [body, setBody] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [sending, setSending] = useState(false);
+  const [showAttach, setShowAttach] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaType, setMediaType] = useState<(typeof MEDIA_TYPE_OPTIONS)[number]>("IMAGE");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -234,17 +269,55 @@ function ConversationThread({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages]);
+
+  // Live message updates for the open thread (new inbound/outbound messages, status changes).
+  useEffect(() => {
+    const socket = getWhatsAppSocket();
+    if (!socket) return;
+
+    function upsert(message: MessageDto) {
+      if (message.conversationId !== conversation.id) return;
+      setMessages((prev) => {
+        const list = prev ?? [];
+        const withoutExisting = list.filter((m) => m.id !== message.id);
+        return [...withoutExisting, message].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+      });
+    }
+
+    socket.on("message.created", upsert);
+    socket.on("message.updated", upsert);
+    return () => {
+      socket.off("message.created", upsert);
+      socket.off("message.updated", upsert);
+    };
+  }, [conversation.id]);
+
+  const sessionOpen = isSessionOpen(conversation);
+  const canSendFreeform = sessionOpen || !!templateName;
+
   async function onSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!body.trim()) return;
+    if (!body.trim() && !mediaUrl.trim()) return;
     setSending(true);
     setError(null);
     try {
       await apiFetch(`/conversations/${conversation.id}/messages`, {
         method: "POST",
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({
+          body: body || undefined,
+          templateName: templateName || undefined,
+          mediaUrl: mediaUrl || undefined,
+          mediaType: mediaUrl ? mediaType : undefined,
+        }),
       });
       setBody("");
+      setMediaUrl("");
+      setShowAttach(false);
       void load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to send message");
@@ -292,7 +365,7 @@ function ConversationThread({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+      <div ref={scrollRef} className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
         {!messages && !error && <p className="text-sm text-zinc-500">Loading…</p>}
         {messages?.map((m) => (
           <div
@@ -303,7 +376,8 @@ function ConversationThread({
                 : "self-start bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
             }`}
           >
-            <p>{m.body}</p>
+            {m.type !== "TEXT" && <MediaContent message={m} />}
+            {m.body && <p className={m.type !== "TEXT" ? "mt-2" : ""}>{m.body}</p>}
             <p
               className={`mt-1 text-[10px] ${
                 m.direction === "OUTBOUND" ? "text-zinc-300 dark:text-zinc-600" : "text-zinc-400"
@@ -311,6 +385,7 @@ function ConversationThread({
             >
               {new Date(m.createdAt).toLocaleString()}
               {m.sentBy && ` · ${m.sentBy.name}`}
+              {m.direction === "OUTBOUND" && ` · ${m.status.toLowerCase()}`}
             </p>
           </div>
         ))}
@@ -318,8 +393,15 @@ function ConversationThread({
 
       {error && <p className="px-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
+      {!sessionOpen && (
+        <p className="mx-4 mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          This conversation&apos;s 24-hour customer session window is closed — pick a template
+          below to reopen it. (Send a &ldquo;Simulate reply&rdquo; to reopen it in dev.)
+        </p>
+      )}
+
       <form onSubmit={onSend} className="flex flex-col gap-2 border-t border-zinc-200 p-3 dark:border-zinc-800">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={templateName}
             onChange={(e) => applyTemplate(e.target.value)}
@@ -334,23 +416,56 @@ function ConversationThread({
           </select>
           <button
             type="button"
+            onClick={() => setShowAttach((v) => !v)}
+            className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+          >
+            {showAttach ? "Remove attachment" : "Attach media"}
+          </button>
+          <button
+            type="button"
             onClick={onSimulateReply}
             className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
           >
             Simulate reply (dev)
           </button>
         </div>
+
+        {showAttach && (
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={mediaType}
+              onChange={(e) => setMediaType(e.target.value as (typeof MEDIA_TYPE_OPTIONS)[number])}
+              className="rounded-md border border-zinc-300 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              {MEDIA_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <input
+              value={mediaUrl}
+              onChange={(e) => setMediaUrl(e.target.value)}
+              placeholder="https://… (publicly reachable file URL)"
+              className="min-w-64 flex-1 rounded-md border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
+          </div>
+        )}
+
         <div className="flex gap-2">
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Type a message…"
+            placeholder={
+              canSendFreeform ? "Type a message…" : "Select a template to reopen this conversation"
+            }
+            disabled={!canSendFreeform}
             rows={2}
-            className="flex-1 resize-none rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            className="flex-1 resize-none rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950"
           />
           <button
             type="submit"
-            disabled={sending}
+            disabled={sending || !canSendFreeform}
             className="rounded-md bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             Send
@@ -358,5 +473,61 @@ function ConversationThread({
         </div>
       </form>
     </div>
+  );
+}
+
+/** Renders an inbound/outbound media message. Provider-hosted media (no direct mediaUrl) is
+ * fetched as an authenticated blob via /whatsapp/media/:messageId — see MediaController. */
+function MediaContent({ message }: { message: MessageDto }) {
+  const [src, setSrc] = useState<string | null>(message.mediaUrl ?? null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (message.mediaUrl || !message.mediaProviderId) return;
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    void apiFetchBlob(`/whatsapp/media/${message.id}`)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [message.id, message.mediaUrl, message.mediaProviderId]);
+
+  if (failed) {
+    return <p className="text-xs italic text-red-400">Failed to load attachment</p>;
+  }
+  if (!src) {
+    return <p className="text-xs italic text-zinc-400">Loading attachment…</p>;
+  }
+
+  if (message.type === "IMAGE") {
+    // eslint-disable-next-line @next/next/no-img-element -- blob/remote URLs, not a static asset next/image can optimize
+    return <img src={src} alt="" className="max-w-full rounded-lg" />;
+  }
+  if (message.type === "VIDEO") {
+    return <video src={src} controls className="max-w-full rounded-lg" />;
+  }
+  if (message.type === "AUDIO") {
+    return <audio src={src} controls />;
+  }
+  return (
+    <a
+      href={src}
+      target="_blank"
+      rel="noreferrer"
+      className="text-xs font-medium underline underline-offset-2"
+    >
+      📎 {message.mediaMimeType ?? "Document"}
+    </a>
   );
 }

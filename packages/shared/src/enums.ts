@@ -54,6 +54,14 @@ export enum MessageDirection {
   OUTBOUND = "OUTBOUND",
 }
 
+export enum MessageType {
+  TEXT = "TEXT",
+  IMAGE = "IMAGE",
+  DOCUMENT = "DOCUMENT",
+  AUDIO = "AUDIO",
+  VIDEO = "VIDEO",
+}
+
 export enum MessageStatus {
   QUEUED = "QUEUED",
   SENT = "SENT",

@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 const TOKEN_KEY = "ai-salesos-token";
 
 export function getToken(): string | null {
@@ -47,4 +47,14 @@ export async function apiFetch<T>(
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/** Fetches a provider-hosted media file as a Blob (see MediaController — requires the bearer token, so a plain <img src> can't be used). */
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError("Failed to load media", res.status);
+  return res.blob();
 }

@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
+  WhatsAppDownloadResult,
   WhatsAppProvider,
   WhatsAppSendParams,
   WhatsAppSendResult,
@@ -14,8 +15,15 @@ import {
 export class StubWhatsAppProvider implements WhatsAppProvider {
   private readonly logger = new Logger(StubWhatsAppProvider.name);
 
-  async sendMessage(params: WhatsAppSendParams): Promise<WhatsAppSendResult> {
-    this.logger.log(`[stub] WhatsApp -> ${params.to}: ${params.body}`);
+  sendMessage(params: WhatsAppSendParams): Promise<WhatsAppSendResult> {
+    const media = params.media ? ` [${params.media.type} ${params.media.url}]` : '';
+    this.logger.log(`[stub] WhatsApp -> ${params.to}: ${params.body ?? ''}${media}`);
     return Promise.resolve({ externalId: `stub_${randomUUID()}` });
+  }
+
+  downloadMedia(): Promise<WhatsAppDownloadResult> {
+    // The stub provider never holds real provider-side media (dev/simulate-inbound
+    // messages reference a plain URL directly via Message.mediaUrl instead).
+    throw new NotFoundException('No media available for this provider');
   }
 }

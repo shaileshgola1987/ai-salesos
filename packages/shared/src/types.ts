@@ -4,6 +4,7 @@ import {
   LeadTemperature,
   MessageDirection,
   MessageStatus,
+  MessageType,
   SubscriptionPlan,
   TaskStatus,
   UserRole,
@@ -125,10 +126,16 @@ export interface MessageDto {
   organizationId: string;
   conversationId: string;
   direction: MessageDirection;
+  type: MessageType;
   body: string;
   status: MessageStatus;
   externalId?: string | null;
   templateName?: string | null;
+  // Present when type != TEXT. mediaProviderId-backed media is fetched via
+  // GET /whatsapp/media/:messageId; mediaUrl is a direct link (dev/stub-provider sends).
+  mediaUrl?: string | null;
+  mediaProviderId?: string | null;
+  mediaMimeType?: string | null;
   sentById?: string | null;
   sentBy?: UserSummaryDto | null;
   createdAt: string;
@@ -143,6 +150,8 @@ export interface ConversationDto {
   customerId?: string | null;
   customer?: CustomerSummaryDto | null;
   lastMessageAt: string;
+  /** Null until the customer has replied at least once — see the 24h session window rule. */
+  lastInboundMessageAt?: string | null;
   createdAt: string;
   updatedAt: string;
   messages?: MessageDto[]; // present as a 1-item "last message" preview on list responses
