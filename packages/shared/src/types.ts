@@ -5,6 +5,7 @@ import {
   MessageDirection,
   MessageStatus,
   MessageType,
+  QuotationStatus,
   SubscriptionPlan,
   TaskStatus,
   UserRole,
@@ -163,6 +164,56 @@ export interface MessageTemplateDto {
   name: string;
   body: string;
   isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Money/quantity fields are Prisma Decimal on the API and serialize to JSON as strings —
+// parse with Number(...) client-side before doing arithmetic or formatting.
+export interface ProductDto {
+  id: string;
+  organizationId: string;
+  name: string;
+  sku?: string | null;
+  description?: string | null;
+  unit: string;
+  unitPrice: string;
+  taxRatePercent: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuotationItemDto {
+  id: string;
+  quotationId: string;
+  productId?: string | null;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  taxRatePercent: string;
+  lineTotal: string;
+  sortOrder: number;
+}
+
+export interface QuotationDto {
+  id: string;
+  organizationId: string;
+  number: string;
+  leadId?: string | null;
+  lead?: LeadSummaryDto & { phone: string; email?: string | null };
+  customerId?: string | null;
+  customer?: CustomerSummaryDto & { phone: string; email?: string | null };
+  createdById: string;
+  createdBy: UserSummaryDto;
+  status: QuotationStatus;
+  validUntil?: string | null;
+  notes?: string | null;
+  subtotal: string;
+  taxAmount: string;
+  totalAmount: string;
+  sentAt?: string | null;
+  items: QuotationItemDto[];
   createdAt: string;
   updatedAt: string;
 }

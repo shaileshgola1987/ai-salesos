@@ -81,6 +81,14 @@ enum MessageType {
   VIDEO
 }
 
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
 /// A tenant: one MSME/company using AI SalesOS (PRD §4.1 Organization module).
 model Organization {
   id        String   @id @default(cuid())
@@ -102,6 +110,8 @@ model Organization {
   conversations     Conversation[]
   messages          Message[]
   messageTemplates  MessageTemplate[]
+  products          Product[]
+  quotations        Quotation[]
 
   @@map("organizations")
 }
@@ -125,9 +135,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  assignedLeads Lead[] @relation("LeadAssignee")
-  assignedTasks Task[] @relation("TaskAssignee")
-  sentMessages  Message[] @relation("MessageSender")
+  assignedLeads     Lead[] @relation("LeadAssignee")
+  assignedTasks     Task[] @relation("TaskAssignee")
+  sentMessages      Message[] @relation("MessageSender")
+  createdQuotations Quotation[] @relation("QuotationCreator")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -178,6 +189,7 @@ model Lead {
 
   tasks         Task[]
   conversations Conversation[]
+  quotations    Quotation[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -201,6 +213,7 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   conversations Conversation[]
+  quotations    Quotation[]
 
   @@index([organizationId])
   @@map("customers")
@@ -313,4 +326,92 @@ model MessageTemplate {
   @@unique([organizationId, name])
   @@index([organizationId])
   @@map("message_templates")
+}
+
+/// PRD §9 Quotation Management — a catalog item that can be added as a quotation line.
+model Product {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name        String
+  sku         String?
+  description String?
+  unit        String  @default("pcs") // e.g. pcs, kg, box — free text, India MSME catalogs vary widely
+  unitPrice   Decimal @db.Decimal(12, 2)
+  /// GST rate applied by default when this product is added to a quotation (India-specific, PRD §9).
+  taxRatePercent Decimal @default(0) @db.Decimal(5, 2)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotationItems QuotationItem[]
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@map("products")
+}
+
+/// PRD §9 Quotation Management — create, send, track, share quotations via WhatsApp/Email.
+model Quotation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Sequential per-org display number, e.g. "Q-0001" — see QuotationsService.
+  number String
+
+  leadId String?
+  lead   Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("QuotationCreator", fields: [createdById], references: [id])
+
+  status     QuotationStatus @default(DRAFT)
+  validUntil DateTime?
+  notes      String?
+
+  subtotal    Decimal @default(0) @db.Decimal(12, 2)
+  taxAmount   Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount Decimal @default(0) @db.Decimal(12, 2)
+
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items QuotationItem[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("quotations")
+}
+
+/// A single priced line on a Quotation. description/unitPrice/taxRatePercent are a snapshot
+/// taken from Product at add-time (editable per line) so later catalog price changes don't
+/// retroactively alter quotations already sent to a customer.
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  description    String
+  quantity       Decimal @db.Decimal(12, 2)
+  unitPrice      Decimal @db.Decimal(12, 2)
+  taxRatePercent Decimal @default(0) @db.Decimal(5, 2)
+  /// quantity * unitPrice, pre-tax.
+  lineTotal      Decimal @db.Decimal(12, 2)
+
+  sortOrder Int @default(0)
+
+  @@index([quotationId])
+  @@map("quotation_items")
 }

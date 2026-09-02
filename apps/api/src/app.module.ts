@@ -11,6 +11,8 @@ import { PipelineStagesModule } from './pipeline-stages/pipeline-stages.module';
 import { TasksModule } from './tasks/tasks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { ProductsModule } from './products/products.module';
+import { QuotationsModule } from './quotations/quotations.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     TasksModule,
     DashboardModule,
     WhatsAppModule,
+    ProductsModule,
+    QuotationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
