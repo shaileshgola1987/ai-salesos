@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiProviderName } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { decryptSecret, encryptSecret, maskSecret } from '../ai/crypto.util';
+import { decryptSecret, encryptSecret, maskSecret } from '../common/crypto.util';
 
 const PLATFORM_SETTINGS_ID = 'singleton';
 

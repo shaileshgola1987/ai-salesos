@@ -89,7 +89,7 @@ function InboxPageInner() {
 
   return (
     <AppShell fullWidth>
-      <div className="flex items-center justify-between pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-4">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Inbox</h2>
         <div className="flex items-center gap-3">
           <Link
@@ -120,8 +120,14 @@ function InboxPageInner() {
 
       {error && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="flex flex-1 gap-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="w-72 flex-shrink-0 overflow-y-auto border-r border-zinc-200 dark:border-zinc-800">
+      {/* Single-pane on mobile: the list and thread take turns filling the screen, switched by
+          selectedId, and both are shown side-by-side from md upward. */}
+      <div className="flex flex-1 gap-0 overflow-hidden rounded-xl border border-zinc-200 bg-white md:gap-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <div
+          className={`${
+            selected ? "hidden md:block" : "block"
+          } w-full flex-shrink-0 overflow-y-auto border-zinc-200 md:w-72 md:border-r dark:border-zinc-800`}
+        >
           {!conversations && !error && (
             <p className="p-4 text-sm text-zinc-500">Loading…</p>
           )}
@@ -154,9 +160,13 @@ function InboxPageInner() {
           })}
         </div>
 
-        <div className="flex flex-1 flex-col">
+        <div className={`${selected ? "flex" : "hidden md:flex"} flex-1 flex-col`}>
           {selected ? (
-            <ConversationThread conversation={selected} templates={templates} />
+            <ConversationThread
+              conversation={selected}
+              templates={templates}
+              onBack={() => setSelectedId(null)}
+            />
           ) : (
             <div className="flex flex-1 items-center justify-center">
               <p className="text-sm text-zinc-500">Select a conversation</p>
@@ -242,9 +252,11 @@ function NewConversationForm({
 function ConversationThread({
   conversation,
   templates,
+  onBack,
 }: {
   conversation: ConversationDto;
   templates: MessageTemplateDto[];
+  onBack: () => void;
 }) {
   const [messages, setMessages] = useState<MessageDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -370,11 +382,23 @@ function ConversationThread({
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <div>
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-            {conversation.lead?.name ?? conversation.customer?.name ?? conversation.phone}
-          </p>
-          <p className="text-xs text-zinc-500">{conversation.phone}</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back to conversations"
+            className="-ml-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 md:hidden dark:hover:bg-zinc-900"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              {conversation.lead?.name ?? conversation.customer?.name ?? conversation.phone}
+            </p>
+            <p className="text-xs text-zinc-500">{conversation.phone}</p>
+          </div>
         </div>
         {conversation.lead && (
           <Link

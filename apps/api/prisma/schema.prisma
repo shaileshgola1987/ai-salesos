@@ -133,6 +133,12 @@ model User {
   otpCode      String?
   otpExpiresAt DateTime?
 
+  /// TOTP 2FA (PRD §22: "optional 2FA for admins") — twoFactorSecret is encrypted at rest
+  /// (see common/crypto.util.ts) and only set once; twoFactorEnabled flips true after the user
+  /// proves they scanned it by submitting one valid code (see AuthService.enableTwoFactor).
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -449,7 +455,7 @@ model PlatformAdmin {
 
 /// One row per provider so a PlatformAdmin can pre-configure several providers' API keys
 /// and switch PlatformSettings.activeAiProvider between them without re-entering keys.
-/// apiKey is encrypted at rest (see ai/crypto.util.ts) — never returned in full by the API.
+/// apiKey is encrypted at rest (see common/crypto.util.ts) — never returned in full by the API.
 model AiProviderConfig {
   provider  AiProviderName @id
   apiKey    String

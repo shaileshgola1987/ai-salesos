@@ -29,8 +29,17 @@ export interface UserDto {
   phone?: string | null;
   role: UserRole;
   isActive: boolean;
+  twoFactorEnabled: boolean;
   createdAt: string;
 }
+
+export interface TwoFactorSetupDto {
+  secret: string;
+  otpauthUrl: string;
+  qrCodeDataUrl: string;
+}
+
+export type LoginResponseDto = { accessToken: string } | { requiresTwoFactor: true; pendingToken: string };
 
 export interface PipelineStageSummaryDto {
   id: string;

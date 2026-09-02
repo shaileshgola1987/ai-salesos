@@ -6,13 +6,19 @@ import {
 } from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
-const SALT = 'ai-salesos-provider-key-v1'; // fixed on purpose — PLATFORM_SECRET is the real secret
+const SALT = 'ai-salesos-provider-key-v1'; // fixed on purpose (and never change it — it would silently break decryption of everything already encrypted); the caller-supplied secret is the real key material
 
 function deriveKey(secret: string): Buffer {
   return scryptSync(secret, SALT, 32);
 }
 
-/** Encrypts a provider API key for storage — never persist AiProviderConfig.apiKey in plaintext. */
+/**
+ * General-purpose at-rest encryption for any server-only secret this app stores — an AI
+ * provider API key (AiProviderConfig.apiKey) or a user's TOTP secret (User.twoFactorSecret).
+ * Callers pass PLATFORM_SECRET as the key material; despite its name (originally introduced
+ * for the platform-admin AI settings feature) it now serves as this app's one encryption
+ * secret for such data, rather than adding a near-identical env var per feature.
+ */
 export function encryptSecret(plaintext: string, secret: string): string {
   const key = deriveKey(secret);
   const iv = randomBytes(12);

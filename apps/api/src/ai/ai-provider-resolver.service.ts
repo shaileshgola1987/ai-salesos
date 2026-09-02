@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { decryptSecret } from './crypto.util';
+import { decryptSecret } from '../common/crypto.util';
 import { AiProvider } from './providers/ai-provider.interface';
 import { StubAiProvider } from './providers/stub-ai.provider';
 import { AnthropicAiProvider } from './providers/anthropic-ai.provider';
