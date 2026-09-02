@@ -251,3 +251,26 @@ export interface AiSettingsDto {
   activeProvider: AiProviderName | null;
   providers: AiProviderConfigSummaryDto[];
 }
+
+// PRD §8 Sales Force Automation — GPS-stamped field visits.
+export interface VisitDto {
+  id: string;
+  organizationId: string;
+  leadId?: string | null;
+  lead?: LeadSummaryDto | null;
+  customerId?: string | null;
+  customer?: CustomerSummaryDto | null;
+  userId: string;
+  user: UserSummaryDto;
+  purpose: string;
+  notes?: string | null;
+  checkInAt: string;
+  checkInLat: string;
+  checkInLng: string;
+  checkOutAt?: string | null;
+  checkOutLat?: string | null;
+  checkOutLng?: string | null;
+  checkOutNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
